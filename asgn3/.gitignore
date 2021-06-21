@@ -1,0 +1,13 @@
+*.o
+*.kld
+*.ko
+export_syms
+machine
+opt_global.h
+vnode_if*.h
+
+# development stuff
+x86
+compile_commands.json
+*.core
+mkkvfs
