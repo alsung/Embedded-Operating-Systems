@@ -1,0 +1,98 @@
+---
+title: CSE134 Assignment 4 Design Doc
+author: Group ABAJ -- Alexander Sung, Benson Ho, Aidan Sojourner, James Quiaoit
+date: June 3, 2021
+geometry: margin=1in
+colorlinks: true
+numbersections: true
+---
+
+# Introduction
+This is the design document for Assignment 4 (`ddfs`) for CSE 134, Spring 2021, at the University of California, Santa Cruz. 
+
+## Goals
+`ddfs` is a deduplicating in-kernel file system for FreeBSD that operates very similarly to Berkeley FFS via leverage of FreeBSD UFS and FFS source code. 
+
+* "Deduplication means that there's exactly one copy of any given data block in the file system."
+* Each file in `ddfs` is uniquely represented as a 160-bit numeric key, shown to the user as 40 hexadecimal characters.
+* Each “key” is associated with a single 4KiB “value”, which is initialized to all 0s when the key-value pair is first created.
+* Keys can be created, retrieved, renamed, updated, and removed using standard UNIX file operations. 
+* `ddfs` block pointers are 20 bytes (160 bits) instead of 8 bytes, and limiting the total number of block pointers to 6. (3 direct, 1 single indirect, 1 double indirect, 1 triple indirect). A `ddfs` file is limited to a maximum of 8531487 blocks, approximately 32 GiB per file. 
+
+# Design
+
+## Disk Layout
+
+![`ddfs` Disk Layout](images/ddfs_diagram.png)
+
+The filesystem "superblock" is allocated at the very beginning of the disk. It contains metadata about the filesystem, and is described in detail in the [Superblock](#superblock) section. 
+
+Each file in `ddfs` is represented by a pair of (inode, block), where the inode coontains metadata about the file, and the block contains the contents. 
+
+
+
+The contents of each inode are described in the [Inode](#inode) section.
+
+### Superblock
+
+The `ddfs` superblock on-disk contains the following entries: 
+
+
+
+### Deduplication Table
+
+
+
+### Cylinder Information and Group Header
+
+
+
+### Inode 
+
+The `ddfs` inode represents the state of each file on disk. 
+
+```c
+struct inode {
+	
+};
+```
+
+Each `inode` is 256 bytes in size. 
+
+
+
+### In-memory
+
+
+## Additional Data Structures and Algorithms
+
+### Mount Structures
+
+
+
+## Initializing the Filesystem -- `mkfs`
+
+
+
+
+
+
+# Testing
+Basic functionality was tested with user-space tools like `cat`, `touch`, `rm`, `mv`, `stat`, and `ls`.
+
+# Limitations and Known Issues
+
+
+
+
+# References{-}
+
+The following files in the FreeBSD source tree were consulted. Unless otherwise specified in the source, code from these files was not copied. Instead, the files were used as a reference and studied to understand the various VFS and vnode operations. 
+
+
+
+Additionally, the following web resources were used:
+
+
+
+The filesystem layout diagram was created using <https://diagrams.net>.

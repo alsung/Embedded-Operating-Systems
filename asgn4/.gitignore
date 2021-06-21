@@ -1,0 +1,18 @@
+*.o
+*.kld
+*.ko
+export_syms
+machine
+opt_*.h
+vnode_if*.h
+
+# development stuff
+x86
+compile_commands.json
+*.core
+*.depend*
+
+# output objects
+tools/newfs-ddfs/newfs-ddfs
+tools/newfs-ddfs/newfs-ddfs.debug
+tools/newfs-ddfs/newfs-ddfs.full
