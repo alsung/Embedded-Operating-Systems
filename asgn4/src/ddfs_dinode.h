@@ -124,10 +124,6 @@ typedef int64_t ufs_time_t;
 #define	UFS_NDADDR	12		/* Direct addresses in inode. */
 #define	UFS_NIADDR	3		/* Indirect addresses in inode. */
 
-
-#define	DDFS_NDKEYS 3		/* Direct keys in inode */
-#define	DDFS_NIKEYS	3		/* Num Indirect keys in inode */
-
 struct ufs2_dinode {
 	u_int16_t	di_mode;	/*   0: IFMT, permissions; see below. */
 	int16_t		di_nlink;	/*   2: File link count. */

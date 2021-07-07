@@ -1,6 +1,6 @@
 *.o
 *.kld
-*.ko
+*.ko*
 export_syms
 machine
 opt_*.h
@@ -16,3 +16,4 @@ compile_commands.json
 tools/newfs-ddfs/newfs-ddfs
 tools/newfs-ddfs/newfs-ddfs.debug
 tools/newfs-ddfs/newfs-ddfs.full
+tools/extra-credit/statddfs

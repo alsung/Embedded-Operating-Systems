@@ -114,8 +114,8 @@ ffs_update(vp, waitfor)
 	/*
 	 * The IN_SIZEMOD and IN_IBLKDATA flags indicate changes to the
 	 * file size and block pointer fields in the inode. When these
-	 * fields have been changed, the fsync() and fsyncdata() system 
-	 * calls must write the inode to ensure their semantics that the 
+	 * fields have been changed, the fsync() and fsyncdata() system
+	 * calls must write the inode to ensure their semantics that the
 	 * file is on stable store.
 	 *
 	 * The IN_SIZEMOD and IN_IBLKDATA flags cannot be cleared until
@@ -164,7 +164,7 @@ loop:
 		 * get reclaimed (VIRF_DOOMED flag) in a forcible downgrade
 		 * or unmount. For an unmount, the entire filesystem will be
 		 * gone, so we cannot attempt to touch anything associated
-		 * with it while the vnode is unlocked; all we can do is 
+		 * with it while the vnode is unlocked; all we can do is
 		 * pause briefly and try again. If when we relock the vnode
 		 * we discover that it has been reclaimed, updating it is no
 		 * longer necessary and we can just return an error.
@@ -288,7 +288,7 @@ ffs_truncate(vp, length, flags, cred)
 		softdeptrunc = !softdep_slowdown(vp);
 	extblocks = 0;
 	datablocks = DIP(ip, i_blocks);
-	if (fs->fs_magic == FS_UFS2_MAGIC && ip->i_din2->di_extsize > 0) {
+	if (fs->fs_magic == FS_DDFS_MAGIC && ip->i_din2->di_extsize > 0) {
 		extblocks = btodb(fragroundup(fs, ip->i_din2->di_extsize));
 		datablocks -= extblocks;
 	}
@@ -411,7 +411,7 @@ ffs_truncate(vp, length, flags, cred)
 	}
 	/*
 	 * If the block number at the new end of the file is zero,
-	 * then we must allocate it to ensure that the last block of 
+	 * then we must allocate it to ensure that the last block of
 	 * the file is allocated. Soft updates does not handle this
 	 * case, so here we have to clean up the soft updates data
 	 * structures describing the allocation past the truncation
@@ -625,6 +625,7 @@ ffs_truncate(vp, length, flags, cred)
 		newspace = blksize(fs, ip, lastblock);
 		if (newspace == 0)
 			panic("ffs_truncate: newspace");
+		printf("truncate to new size... %ld->%ld\n", oldspace, newspace);
 		if (oldspace - newspace > 0) {
 			/*
 			 * Block number of space to be free'd is
@@ -652,7 +653,7 @@ done:
 			    (intmax_t)DIP(ip, i_ib[level]));
 	BO_LOCK(bo);
 	if (length == 0 &&
-	    (fs->fs_magic != FS_UFS2_MAGIC || ip->i_din2->di_extsize == 0) &&
+	    (fs->fs_magic != FS_DDFS_MAGIC || ip->i_din2->di_extsize == 0) &&
 	    (bo->bo_dirty.bv_cnt > 0 || bo->bo_clean.bv_cnt > 0))
 		panic("ffs_truncate3: vp = %p, buffers: dirty = %d, clean = %d",
 			vp, bo->bo_dirty.bv_cnt, bo->bo_clean.bv_cnt);

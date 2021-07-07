@@ -170,7 +170,7 @@ struct vop_vector ffs_fifoops1 = {
 };
 VFS_VOP_VECTOR_REGISTER(ffs_fifoops1);
 
-/* Global vfs data structures for ufs. */
+/* Global vfs data structures for ffs/ufs2. */
 struct vop_vector ffs_vnodeops2 = {
 	.vop_default =		&ufs_vnodeops,
 	.vop_fsync =		ffs_fsync,
@@ -182,7 +182,12 @@ struct vop_vector ffs_vnodeops2 = {
 	.vop_unlock =		ffs_unlock_debug,
 #endif
 	.vop_read =		ffs_read,
-	.vop_reallocblks =	ffs_reallocblks,
+	/*
+	 * XXX(ddsf)
+	 * Don't bother trying to reallocate blocks.
+	 * This seems to break stuff.
+	 */
+	.vop_reallocblks =	VOP_EOPNOTSUPP,
 	.vop_write =		ffs_write,
 	.vop_closeextattr =	ffs_closeextattr,
 	.vop_deleteextattr =	ffs_deleteextattr,
@@ -203,7 +208,12 @@ struct vop_vector ffs_fifoops2 = {
 #ifdef INVARIANTS
 	.vop_unlock =		ffs_unlock_debug,
 #endif
-	.vop_reallocblks =	ffs_reallocblks,
+	/*
+	 * XXX(ddsf)
+	 * Don't bother trying to reallocate blocks.
+	 * This seems to break stuff.
+	 */
+	.vop_reallocblks =	VOP_EOPNOTSUPP,
 	.vop_strategy =		ffsext_strategy,
 	.vop_closeextattr =	ffs_closeextattr,
 	.vop_deleteextattr =	ffs_deleteextattr,
@@ -824,6 +834,7 @@ ffs_write(ap)
 		struct ucred *a_cred;
 	} */ *ap;
 {
+	printf("ddfs_write\n");
 	struct vnode *vp;
 	struct uio *uio;
 	struct inode *ip;
@@ -834,6 +845,9 @@ ffs_write(ap)
 	ssize_t resid;
 	int seqcount;
 	int blkoffset, error, flags, ioflag, size, xfersize;
+
+	struct ufsmount *ump;
+	struct ufs2_dinode *dp;
 
 	vp = ap->a_vp;
 	if (DOINGSUJ(vp))
@@ -852,6 +866,9 @@ ffs_write(ap)
 
 	seqcount = ap->a_ioflag >> IO_SEQSHIFT;
 	ip = VTOI(vp);
+
+	ump = VFSTOUFS(vp->v_mount);
+	dp = ip->i_din2;
 
 #ifdef INVARIANTS
 	if (uio->uio_rw != UIO_WRITE)
@@ -944,7 +961,7 @@ ffs_write(ap)
 		 * The only easy solution was to modify ffs_balloc_ufs2 in ddfs_balloc.c to
 		 * remove the GB_UNMAPPED flag anywhere. This _forces_ the buffer for each file
 		 * to be memory mapped with an underlying vm_object
-		 * */
+		 */
 		if (!buf_mapped(bp)) {
 			printf("warn: ddfs can't use page map for writes\n");
 			error = EIO;
@@ -952,13 +969,28 @@ ffs_write(ap)
 		}
 
 		/* write the new file */
-		error = vn_io_fault_uiomove(bp->b_data + blkoffset, (int)xfersize, uio);
+		error = vn_io_fault_uiomove(bp->b_data + blkoffset, xfersize, uio);
 
-		uint8_t result2[20];
-		char hexhash2[KVFS_KEY_STRLEN + 1];
-		hash_block(result2, bp->b_data, KVFS_BLOCKSIZE);
-		key_to_str(result2, hexhash2);
-		printf("got hash for new block: %s\n", hexhash2);
+		uint8_t hash[20];
+		char strhash[DDFS_KEY_STRLEN + 1];
+		hash_block(hash, bp->b_data + blkoffset, DDFS_BLOCKSIZE);
+		key_to_str(hash, strhash);
+		printf("got hash for new block: %s\n", strhash);
+
+		/* find hash in dedup table */
+		daddr_t newblk;
+		daddr_t oldblk = dp->di_db[lbn];
+		ddtable_alloc(ump, hash, oldblk, &newblk);
+		if (newblk != oldblk) {
+			/* we are deduplicating a block, so update block pointer in-place */
+			printf("updating block pointer: %zu -> %zu\n", oldblk, newblk);
+			dp->di_db[lbn] = newblk;
+			/* free up the "block" fragment that was allocated above */
+			ffs_blkfree(ump, fs, ump->um_devvp, oldblk, DDFS_BLOCKSIZE,
+				ip->i_number, vp->v_type, NULL, SINGLETON_KEY);
+			/* tell the system to fsync our newly modified inode */
+			UFS_INODE_SET_FLAG(ip, IN_MODIFIED | IN_NEEDSYNC);
+		}
 
 		/*
 		 * If the buffer is not already filled and we encounter an
@@ -1068,7 +1100,7 @@ ffs_extread(struct vnode *vp, struct uio *uio, int ioflag)
 	dp = ip->i_din2;
 
 #ifdef INVARIANTS
-	if (uio->uio_rw != UIO_READ || fs->fs_magic != FS_UFS2_MAGIC)
+	if (uio->uio_rw != UIO_READ || fs->fs_magic != FS_DDFS_MAGIC)
 		panic("ffs_extread: mode");
 
 #endif
@@ -1187,7 +1219,7 @@ ffs_extwrite(struct vnode *vp, struct uio *uio, int ioflag, struct ucred *ucred)
 	dp = ip->i_din2;
 
 #ifdef INVARIANTS
-	if (uio->uio_rw != UIO_WRITE || fs->fs_magic != FS_UFS2_MAGIC)
+	if (uio->uio_rw != UIO_WRITE || fs->fs_magic != FS_DDFS_MAGIC)
 		panic("ffs_extwrite: mode");
 #endif
 
@@ -1370,7 +1402,7 @@ ffs_rdextattr(u_char **p, struct vnode *vp, struct thread *td)
 			easize = (const u_char *)eap - eae;
 			break;
 		}
-			
+
 		eapnext = EXTATTR_NEXT(eap);
 		/* Bogusly long entry. */
 		if (eapnext > eaend) {

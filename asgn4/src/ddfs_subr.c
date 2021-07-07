@@ -263,10 +263,7 @@ readsuper(void *devfd, struct fs **fsp, off_t sblockloc, int isaltsblk,
 	fs = *fsp;
 	if (fs->fs_magic == FS_BAD_MAGIC)
 		return (EINVAL);
-	if (((fs->fs_magic == FS_UFS1_MAGIC && (isaltsblk ||
-	      sblockloc <= SBLOCK_UFS1)) ||
-	     (fs->fs_magic == FS_UFS2_MAGIC && (isaltsblk ||
-	      sblockloc == fs->fs_sblockloc))) &&
+	if ((fs->fs_magic == FS_DDFS_MAGIC && (isaltsblk || sblockloc == fs->fs_sblockloc)) &&
 	    fs->fs_ncg >= 1 &&
 	    fs->fs_bsize >= MINBSIZE &&
 	    fs->fs_bsize <= MAXBSIZE &&

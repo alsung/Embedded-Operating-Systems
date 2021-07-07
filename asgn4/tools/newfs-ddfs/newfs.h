@@ -48,9 +48,10 @@
  *	MINBSIZE <= DESBLKSIZE <= MAXBSIZE
  *	sectorsize <= DESFRAGSIZE <= DESBLKSIZE
  *	DESBLKSIZE / DESFRAGSIZE <= 8
+ *	XXX(ddfs): force:4k blocks with 1 fragment each.
  */
-#define	DFL_FRAGSIZE	4096
-#define	DFL_BLKSIZE	32768
+#define	DFL_FRAGSIZE 4096
+#define	DFL_BLKSIZE 4096
 
 /*
  * Cylinder groups may have up to MAXBLKSPERCG blocks. The actual

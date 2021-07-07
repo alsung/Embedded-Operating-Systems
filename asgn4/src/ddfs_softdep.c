@@ -6933,7 +6933,7 @@ softdep_journal_freeblocks(ip, cred, length, flags)
 		iboff = lastlbn;
 	} else if (lastlbn > 0)
 		iboff = UFS_NDADDR;
-	if (fs->fs_magic == FS_UFS2_MAGIC)
+	if (fs->fs_magic == FS_DDFS_MAGIC)
 		extblocks = btodb(fragroundup(fs, ip->i_din2->di_extsize));
 	/*
 	 * Handle normal data blocks and indirects.  This section saves
@@ -7253,7 +7253,7 @@ softdep_setup_freeblocks(ip, length, flags)
 	freeblks = newfreeblks(mp, ip);
 	extblocks = 0;
 	datablocks = 0;
-	if (fs->fs_magic == FS_UFS2_MAGIC)
+	if (fs->fs_magic == FS_DDFS_MAGIC)
 		extblocks = btodb(fragroundup(fs, ip->i_din2->di_extsize));
 	if ((flags & IO_NORMAL) != 0) {
 		for (i = 0; i < UFS_NDADDR; i++)

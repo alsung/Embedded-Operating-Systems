@@ -53,6 +53,7 @@
  * For filesystem fs, the offsets of the various blocks of interest
  * are given in the super block as:
  *	[fs->fs_sblkno]		Super-block
+ *  [fs->fs_ddblkno]	Dedup table blocks [XXX(ddfs)]
  *	[fs->fs_cblkno]		Cylinder group block
  *	[fs->fs_iblkno]		Inode blocks
  *	[fs->fs_dblkno]		Data blocks
@@ -77,6 +78,12 @@
 #define	SBLOCKSIZE	  8192
 #define	SBLOCKSEARCH \
 	{ SBLOCK_UFS2, SBLOCK_UFS1, SBLOCK_FLOPPY, SBLOCK_PIGGY, -1 }
+
+/*
+ * XXX(ddfs)
+ * Total amount of disk space (as a fraction) reserved for deduplication
+ */
+#define DEDUP_FRAC	8
 
 /*
  * Max number of fragments per block. This value is NOT tweakable.
@@ -301,8 +308,10 @@ struct fs_summary_info {
  * Super block for an FFS filesystem.
  */
 struct fs {
-	int32_t	 fs_firstfield;		/* XXX(ddfs): number of blocks of dedup tracking */
+	int32_t	 fs_firstfield;		/* XXX(ddfs): number of fragments of dedup tracking */
+#define fs_dedupfrags fs_firstfield
 	int32_t	 fs_unused_1;		/* XXX(ddfs): offset of dedup tracking in filesys */
+#define fs_ddblkno fs_unused_1
 	int32_t	 fs_sblkno;		/* offset of super-block in filesys */
 	int32_t	 fs_cblkno;		/* offset of cyl-block in filesys */
 	int32_t	 fs_iblkno;		/* offset of inode-blocks in filesys */
@@ -416,6 +425,8 @@ CTASSERT(sizeof(struct fs) == 1376);
 /*
  * Filesystem identification
  */
+/* XXX(ddfs): new magic number */
+#define	FS_DDFS_MAGIC	0x52386261	/* DDFS filesystem magic number */
 #define	FS_UFS1_MAGIC	0x011954	/* UFS1 fast filesystem magic number */
 #define	FS_UFS2_MAGIC	0x19540119	/* UFS2 fast filesystem magic number */
 #define	FS_BAD_MAGIC	0x19960408	/* UFS incomplete newfs magic number */
@@ -620,11 +631,11 @@ struct cg {
 #define	cgdmin(fs, c)	(cgstart(fs, c) + (fs)->fs_dblkno)	/* 1st data */
 #define	cgimin(fs, c)	(cgstart(fs, c) + (fs)->fs_iblkno)	/* inode blk */
 /* XXX(ddfs): cgsblock starts after dedup table */
-#define	cgsblock(fs, c)	(cgstart(fs, c) + (fs)->fs_sblkno \
-		+ (fs)->fs_firstfield)	/* super blk */
+#define	cgsblock(fs, c)	(cgstart(fs, c) + (fs)->fs_ddblkno \
+		+ (fs)->fs_dedupfrags)	/* super blk */
 #define	cgtod(fs, c)	(cgstart(fs, c) + (fs)->fs_cblkno)	/* cg block */
 #define	cgstart(fs, c)							\
-       ((fs)->fs_magic == FS_UFS2_MAGIC ? cgbase(fs, c) :		\
+       ((fs)->fs_magic == FS_DDFS_MAGIC ? cgbase(fs, c) :		\
        (cgbase(fs, c) + (fs)->fs_old_cgoffset * ((c) & ~((fs)->fs_old_cgmask))))
 
 /*

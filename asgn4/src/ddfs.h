@@ -1,5 +1,5 @@
-#ifndef KVFS_H
-#define KVFS_H
+#ifndef DDFS_H
+#define DDFS_H
 
 #ifdef _KERNEL
 #include <sys/types.h>
@@ -7,27 +7,30 @@
 #include <stdint.h>
 #endif /* _KERNEL */
 
-/* Blocks in KVFS are always 4096KiB in size */
-#define KVFS_BLOCKSIZE 4096
+/* Each deduplicated block is always 4k */
+#define DDFS_BLOCKSIZE 4096
 
 /* Keys in kvfs are always 40 characters long */
-#define KVFS_KEY_STRLEN 40
+#define DDFS_KEY_STRLEN 40
 
 /* KVFS inode flags */
-#define KVFS_INODE_ACTIVE 0x0001
-#define KVFS_INODE_FREE 0x0002
+#define DDFS_DEDUP_FREE 0x0001
+#define DDFS_DEDUP_ACTIVE 0x0010
 
-/* kvfs inode. On-disk representation of a file.  */
-struct __attribute__((packed)) kvfs_inode {
+/* 
+ * On-disk representation of a ddfs dedup table entry.
+ * Contains a key, ref count, and block pointer.
+ * The reference count is incremented when a 4k fragment hashes to the key in this entry,
+ * and decremented when the old hash does not match the new hash.
+ * When the reference count reaches 0, this entry is freed.
+ */
+struct __attribute__((packed)) ddfs_dedup {
 	uint8_t key[20];    /* 160 bit key */
-	uint16_t flags;	    /* inode flags */
-	uint16_t ref_count; /* reference count. currently always 1 */
-	uint64_t timestamp; /* modification time in nanoseconds */
+	uint16_t flags;	    /* flags. one of FREE | ACTIVE */
+	uint16_t ref_count; /* reference count*/
+	daddr_t blockptr;	/* block pointer for this key-value pair */
 };
 
-/* ==================
- * Kernel-only structures
- * ================== */
 #ifdef _KERNEL
 
 /* ==================
@@ -40,36 +43,20 @@ int str_to_key(const char *str, uint8_t *out_key);
 /* Convert 160-bit key to 40-digit string */
 int key_to_str(const uint8_t *key, char *out_str);
 
-/* unpack a packed uint64_t nanosecond epoch into timespec */
-void uint64_to_timespec(uint64_t packed, struct timespec *ts);
-
-/* pack timespec into uint64_t nanosecond epoch */
-uint64_t timespec_to_uint64(struct timespec *ts);
-
 /* hash a block with sha1 */
 int hash_block(uint8_t result[20], void *buf, size_t size);
 
-/* convert ino to block index */
-#define INO_TO_BLOCKNUM(ino) (((ino) / sizeof(struct kvfs_inode)) * BLOCKSIZE)
+/* ==================
+ * Kernel Dedup Functions
+ * ================== */
+struct ufsmount;
 
-/* convert ino to free block byte offset */
-#define INO_TO_FREE_BYTE(ino, mp) \
-	(((ino) / sizeof(struct kvfs_inode) / 8) + mp->freelist_off)
+/* allocate a free space in the ddtable, or increment an existing key if found */
+int ddtable_alloc(struct ufsmount *mnt, uint8_t key[20], daddr_t in_block, daddr_t *out_block);
 
-/* convert ino to mask containing free bit sit*/
-#define INO_TO_FREE_BIT_MASK(ino) (1 << ((ino) / sizeof(struct kvfs_inode) % 8))
+/* decrement a key-value pair in the ddtable. removes the key-value pair if refcount == 0 */
+int ddtable_unref(struct ufsmount *mnt, daddr_t blocknum);
 
 #endif /* _KERNEL */
 
-/* ==================
- * Global Helper Macros
- * ================== */
-
-/* ceiling of a/b without using floats */
-#define CEIL(a, b) (((a) + (b)-1) / (b))
-
-/* pad byte_count to the next multiple of BLOCKSIZE,
- * returning the number of bytes in the next multiple of BLOCKSIZE */
-#define PAD(bc) (CEIL((bc), BLOCKSIZE) * BLOCKSIZE)
-
-#endif /* ! KVFS_H */
+# endif /* ! DDFS_H */

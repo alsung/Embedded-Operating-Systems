@@ -402,6 +402,9 @@ main(int argc, char *argv[])
 		if (pp != NULL)
 			pp->p_size *= secperblk;
 	}
+
+	/* XXX(ddfs): never create snap directory */
+	nflag = 1;
 	mkfs(pp, special);
 	ufs_disk_close(&disk);
 	if (!jflag)

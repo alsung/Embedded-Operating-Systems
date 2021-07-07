@@ -70,6 +70,8 @@ __FBSDID("$FreeBSD$");
 #include "ddfs_fs.h"
 #include "newfs.h"
 
+#include "ddfs.h"
+
 /*
  * make file system for cylinder-group style file systems
  */
@@ -159,7 +161,7 @@ mkfs(struct partition *pp, char *fsys)
 		printf("preposterous size %jd\n", (intmax_t)fssize);
 		exit(13);
 	}
-	wtfs(fssize - (realsectorsize / DEV_BSIZE), realsectorsize, 
+	wtfs(fssize - (realsectorsize / DEV_BSIZE), realsectorsize,
 			(char *)&sblock);
 	/*
 	 * collect and verify the file system density info
@@ -300,18 +302,15 @@ restart:
 	sblock.fs_sblkno =
 	    roundup(howmany(sblock.fs_sblockloc + SBLOCKSIZE, sblock.fs_fsize),
 		sblock.fs_frag);
-	/* XXX(ddfs): how many fragments (4K blocks) are we using for dedup tracking?
-	 * we allocate 12.5% of the disk (1/8) for dedup tracking.
-	 * use unused superblock fields so we don't have to modify libufs
-	 *	- fs_unused_1: starting offset of dedup tracking
-	 *	- fs_firstfield: how many fragments (4k blocks) are used for dedup tracking
+	/*
+	 * XXX(ddfs): how many fragments (4K blocks) are we using for dedup tracking?
 	 */
-	uint32_t extra = roundup(mediasize / 8, sblock.fs_frag);
-	sblock.fs_unused_1 = sblock.fs_sblkno + howmany(SBLOCKSIZE, sblock.fs_fsize);
-	sblock.fs_firstfield = roundup(howmany(extra, sblock.fs_fsize), sblock.fs_frag);
+	uint64_t extra = roundup(mediasize / DEDUP_FRAC, sblock.fs_fsize);
+	sblock.fs_ddblkno = sblock.fs_sblkno + howmany(SBLOCKSIZE, sblock.fs_fsize);
+	sblock.fs_dedupfrags = roundup(howmany(extra, sblock.fs_fsize), sblock.fs_frag);
 	/* XXX(ddfs): shift over start of cylinder group by our dedup tracking offset */
-	sblock.fs_cblkno = 
-		sblock.fs_unused_1 + sblock.fs_firstfield +
+	sblock.fs_cblkno =
+		roundup(sblock.fs_ddblkno + sblock.fs_dedupfrags, sblock.fs_frag) +
 	    roundup(howmany(SBLOCKSIZE, sblock.fs_fsize), sblock.fs_frag);
 	sblock.fs_iblkno = sblock.fs_cblkno + sblock.fs_frag;
 	sblock.fs_maxfilesize = sblock.fs_bsize * UFS_NDADDR - 1;
@@ -319,11 +318,11 @@ restart:
 		sizepb *= NINDIR(&sblock);
 		sblock.fs_maxfilesize += sizepb;
 	}
-	printf("placed superblock at offset %d\n", sblock.fs_sblkno);
-	printf("placed dedup at offset %d\n", sblock.fs_unused_1);
-	printf("allocated %d dedup blocks\n", sblock.fs_firstfield);
-	printf("placed cylinderblock at offset %d\n", sblock.fs_cblkno);
-	printf("placed inode at offset %d\n", sblock.fs_iblkno);
+	printf("Allocated %d dedup blocks\n", sblock.fs_dedupfrags);
+	printf("Placed superblock at offset %d\n", sblock.fs_sblkno);
+	printf("Placed dedup at offset %d\n", sblock.fs_ddblkno);
+	printf("Placed cylinderblock at offset %d\n", sblock.fs_cblkno);
+	printf("Placed inode at offset %d\n", sblock.fs_iblkno);
 
 	/*
 	 * It's impossible to create a snapshot in case that fs_maxfilesize
@@ -539,7 +538,7 @@ restart:
 #	undef B2MBFACTOR
 
 	if (Eflag && !Nflag) {
-		printf("Erasing sectors [%jd...%jd]\n", 
+		printf("Erasing sectors [%jd...%jd]\n",
 		    sblock.fs_sblockloc / disk.d_bsize,
 		    fsbtodb(&sblock, sblock.fs_size) - 1);
 		berase(&disk, sblock.fs_sblockloc / disk.d_bsize,
@@ -581,7 +580,7 @@ restart:
 	if (Xflag == 2)
 		printf("** Leaving BAD MAGIC on Xflag 2\n");
 	else
-		sblock.fs_magic = (Oflag != 1) ? FS_UFS2_MAGIC : FS_UFS1_MAGIC;
+		sblock.fs_magic = (Oflag != 1) ? FS_DDFS_MAGIC : FS_UFS1_MAGIC;
 
 	/*
 	 * Now build the cylinders group blocks and
@@ -653,7 +652,7 @@ restart:
 	 * 20 bytes with the recovery information, then write it back.
 	 * The recovery information only works for UFS2 filesystems.
 	 */
-	if (sblock.fs_magic == FS_UFS2_MAGIC) {
+	if (sblock.fs_magic == FS_DDFS_MAGIC) {
 		if ((fsrbuf = malloc(realsectorsize)) == NULL || bread(&disk,
 		    part_ofs + (SBLOCK_UFS2 - realsectorsize) / disk.d_bsize,
 		    fsrbuf, realsectorsize) == -1)
@@ -678,6 +677,19 @@ restart:
 		pp->p_fsize = sblock.fs_fsize;
 		pp->p_frag = sblock.fs_frag;
 		pp->p_cpg = sblock.fs_fpg;
+	}
+	/* XXX(ddfs): initilize dedup table */
+	struct ddfs_dedup free_entry = {0};
+	free_entry.flags = DDFS_DEDUP_FREE;
+	char buf[sblock.fs_fsize];
+	for (int i = 0; i < sblock.fs_fsize; i += sizeof(struct ddfs_dedup)) {
+		memcpy(buf + i, &free_entry, sizeof(struct ddfs_dedup));
+	}
+	for (int i = 0; i < sblock.fs_dedupfrags; i++) {
+		/* XXX: convert "fragment block number" to disk-segment logical block number */
+		daddr_t lbn = (sblock.fs_fsize / DEV_BSIZE) * (sblock.fs_ddblkno + i);
+		if (bwrite(&disk, lbn, buf, sblock.fs_fsize) < 0)
+			err(36, "wtfs: error writing dedup table\n");
 	}
 }
 
@@ -965,7 +977,7 @@ fsinit(time_t utime)
 				    alloc(sblock.fs_fsize, node.dp2.di_mode);
 			node.dp2.di_blocks =
 			    btodb(fragroundup(&sblock, node.dp2.di_size));
-				wtfs(fsbtodb(&sblock, node.dp2.di_db[0]), 
+				wtfs(fsbtodb(&sblock, node.dp2.di_db[0]),
 				    sblock.fs_fsize, iobuf);
 			iput(&node, UFS_ROOTINO + 1);
 		}

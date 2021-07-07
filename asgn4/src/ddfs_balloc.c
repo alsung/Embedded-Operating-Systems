@@ -590,6 +590,7 @@ int
 ffs_balloc_ufs2(struct vnode *vp, off_t ufsoffset, int size,
     struct ucred *cred, int flags, struct buf **bpp)
 {
+	printf("ddfs_balloc\n");
 	struct inode *ip;
 	struct ufs2_dinode *dp;
 	ufs_lbn_t lbn, lastlbn;
@@ -833,16 +834,8 @@ ffs_balloc_ufs2(struct vnode *vp, off_t ufsoffset, int size,
 				&dp->di_db[0]), nsize, flags, cred, &newb);
 			if (error)
 				return (error);
-			/* XXX(ddfs): always read in the old block so we can hash it */
 			bp = getblk(vp, lbn, nsize, 0, 0, gbflags);
 			bp->b_blkno = fsbtodb(fs, newb);
-			/* bp = getblk(vp, lbn, nsize, 0, 0, gbflags); */
-			/* before we clear the buf, hash it */
-			uint8_t result1[20];
-			char hexhash[KVFS_KEY_STRLEN + 1];
-			hash_block(result1, bp->b_data, KVFS_BLOCKSIZE);
-			key_to_str(result1, hexhash);
-			printf("got hash for old block: %s\n", hexhash);
 			if (flags & BA_CLRBUF) {
 				vfs_bio_clrbuf(bp);
 			}
@@ -1090,7 +1083,6 @@ retry:
 	 * the number of I/O transactions.
 	 */
 	if (flags & BA_CLRBUF) {
-
 		printf("clearing buf %d", __LINE__);
 		int seqcount = (flags & BA_SEQMASK) >> BA_SEQSHIFT;
 		if (seqcount != 0 &&

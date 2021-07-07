@@ -1,4 +1,4 @@
-SUBDIRS=newfs-ddfs
+SUBDIRS=newfs-ddfs extra-credit
 
 all:
 	for dir in $(SUBDIRS); do \

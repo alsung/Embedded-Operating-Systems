@@ -6,5 +6,6 @@ SRCS=opt_ddb.h opt_directio.h opt_ffs.h opt_quota.h opt_suiddir.h opt_ufs.h \
 	vnode_if.h
 # turn off ffs snapshot support to avoid sysctl warnings
 CFLAGS+=-DNO_FFS_SNAPSHOT -I.
+DEBUG_FLAGS=-g
 
 .include <bsd.kmod.mk>

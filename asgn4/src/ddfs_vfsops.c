@@ -893,8 +893,7 @@ ffs_reload(struct mount *mp, struct thread *td, int flags)
 	    NOCRED, &bp)) != 0)
 		return (error);
 	newfs = (struct fs *)bp->b_data;
-	if ((newfs->fs_magic != FS_UFS1_MAGIC &&
-	     newfs->fs_magic != FS_UFS2_MAGIC) ||
+	if ((newfs->fs_magic != FS_DDFS_MAGIC) ||
 	    newfs->fs_bsize > MAXBSIZE ||
 	    newfs->fs_bsize < sizeof(struct fs)) {
 			brelse(bp);
@@ -1673,7 +1672,7 @@ ffs_statfs(mp, sbp)
 
 	ump = VFSTOUFS(mp);
 	fs = ump->um_fs;
-	if (fs->fs_magic != FS_UFS1_MAGIC && fs->fs_magic != FS_UFS2_MAGIC)
+	if (fs->fs_magic != FS_UFS1_MAGIC && fs->fs_magic != FS_DDFS_MAGIC)
 		panic("ffs_statfs");
 	sbp->f_version = STATFS_VERSION;
 	sbp->f_bsize = fs->fs_fsize;
@@ -2190,7 +2189,7 @@ ffs_inotovp(mp, ino, gen, lflags, vpp, ffs_flags)
 	 * Need to check if inode is initialized because UFS2 does lazy
 	 * initialization and nfs_fhtovp can offer arbitrary inode numbers.
 	 */
-	if (fs->fs_magic == FS_UFS2_MAGIC) {
+	if (fs->fs_magic == FS_DDFS_MAGIC) {
 		cg = ino_to_cg(fs, ino);
 		error = ffs_getcg(fs, ump->um_devvp, cg, 0, &bp, &cgp);
 		if (error != 0)
@@ -2339,7 +2338,7 @@ ffs_use_bwrite(void *devfd, off_t loc, void *buf, int size)
 		    fs->fs_fsmnt, fs->fs_sblockloc, SBLOCK_UFS1);
 		fs->fs_sblockloc = SBLOCK_UFS1;
 	}
-	if (fs->fs_magic == FS_UFS2_MAGIC && fs->fs_sblockloc != SBLOCK_UFS2 &&
+	if (fs->fs_magic == FS_DDFS_MAGIC && fs->fs_sblockloc != SBLOCK_UFS2 &&
 	    (fs->fs_old_flags & FS_FLAGS_UPDATED) == 0) {
 		printf("WARNING: %s: correcting fs_sblockloc from %jd to %d\n",
 		    fs->fs_fsmnt, fs->fs_sblockloc, SBLOCK_UFS2);

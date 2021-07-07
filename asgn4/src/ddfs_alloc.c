@@ -102,6 +102,8 @@ __FBSDID("$FreeBSD$");
 #include <ufs/ffs/ffs_extern.h>
 #include <ufs/ffs/softdep.h>
 
+#include "ddfs.h"
+
 typedef ufs2_daddr_t allocfcn_t(struct inode *ip, u_int cg, ufs2_daddr_t bpref,
 				  int size, int rsize);
 
@@ -154,6 +156,7 @@ ffs_alloc(ip, lbn, bpref, size, flags, cred, bnp)
 	struct ucred *cred;
 	ufs2_daddr_t *bnp;
 {
+	printf("ddfs_alloc\n");
 	struct fs *fs;
 	struct ufsmount *ump;
 	ufs2_daddr_t bno;
@@ -1051,10 +1054,10 @@ ffs_reallocblks_ufs2(ap)
 			 * blocks that had been written.
 			 */
 			ffs_blkfree(ump, fs, ump->um_devvp,
-			    dbtofsb(fs, bp->b_blkno),
-			    fs->fs_bsize, ip->i_number, vp->v_type, NULL,
-			    (bp->b_flags & B_DELWRI) != 0 ?
-			    NOTRIM_KEY : SINGLETON_KEY);
+				dbtofsb(fs, bp->b_blkno),
+				fs->fs_bsize, ip->i_number, vp->v_type, NULL,
+				(bp->b_flags & B_DELWRI) != 0 ?
+				NOTRIM_KEY : SINGLETON_KEY);
 		bp->b_blkno = fsbtodb(fs, blkno);
 #ifdef INVARIANTS
 		if (!ffs_checkblk(ip, dbtofsb(fs, bp->b_blkno), fs->fs_bsize))
@@ -1177,7 +1180,7 @@ retry:
 	while (ip->i_gen == 0 || ++ip->i_gen == 0)
 		ip->i_gen = arc4random();
 	DIP_SET(ip, i_gen, ip->i_gen);
-	if (fs->fs_magic == FS_UFS2_MAGIC) {
+	if (fs->fs_magic == FS_DDFS_MAGIC) {
 		vfs_timestamp(&ts);
 		ip->i_din2->di_birthtime = ts.tv_sec;
 		ip->i_din2->di_birthnsec = ts.tv_nsec;
@@ -1185,7 +1188,7 @@ retry:
 	ip->i_flag = 0;
 	(*vpp)->v_vflag = 0;
 	(*vpp)->v_type = VNON;
-	if (fs->fs_magic == FS_UFS2_MAGIC) {
+	if (fs->fs_magic == FS_DDFS_MAGIC) {
 		(*vpp)->v_op = &ffs_vnodeops2;
 		UFS_INODE_SET_FLAG(ip, IN_UFS2);
 	} else {
@@ -1674,6 +1677,7 @@ ffs_fragextend(ip, cg, bprev, osize, nsize)
 	ufs2_daddr_t bprev;
 	int osize, nsize;
 {
+	printf("  ffs_fragextend\n");
 	struct fs *fs;
 	struct cg *cgp;
 	struct buf *bp;
@@ -2123,7 +2127,7 @@ gotit:
 	/*
 	 * Check to see if we need to initialize more inodes.
 	 */
-	if (fs->fs_magic == FS_UFS2_MAGIC &&
+	if (fs->fs_magic == FS_DDFS_MAGIC &&
 	    ipref + INOPB(fs) > cgp->cg_initediblk &&
 	    cgp->cg_initediblk < cgp->cg_niblk) {
 		old_initediblk = cgp->cg_initediblk;
@@ -2633,6 +2637,18 @@ ffs_blkfree(ump, fs, devvp, bno, size, inum, vtype, dephd, key)
 	struct workhead *dephd;
 	u_long key;
 {
+	/*
+	 * XXX(ddfs): free blocks only if their refcount is 0,
+	 * or if the block is not found.
+	 */
+	printf("ddfs_blkfree on block pointer %zd\n", bno);
+	/* read the block that wants to be deleted and hash it */
+	int refcount = ddtable_unref(ump, bno);
+	if (refcount > 0) {
+		printf("blkfree: refcount is now %d. Skipping free...\n", refcount);
+		return;
+	}
+	printf("blkfree: found refcount of %d. Freeing...\n", refcount);
 	struct ffs_blkfree_trim_params *tp, *ntp;
 	struct trim_blkreq *blkelm;
 
