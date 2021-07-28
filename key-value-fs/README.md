@@ -1,4 +1,4 @@
-# asgn3 (`kvfs`), by group ABAJ
+## Key Value File System
 
 ## Known Issues 
 To the best of our knowledge, our final submission meets all of the assignment specifications. However, there are certainly areas we would like to improve upon, given more time. Here is a list of them:
