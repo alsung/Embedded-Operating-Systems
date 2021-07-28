@@ -1,4 +1,4 @@
-# asgn4 (`ddfs`), by group ABAJ
+# Deduplicating Fast File System
 
 # Building and Loading
 
